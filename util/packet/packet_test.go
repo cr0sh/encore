@@ -144,6 +144,14 @@ func TestMarshal(t *testing.T) {
 			},
 			[]byte("Hello guys!가나다라마바사아."),
 		},
+		{
+			struct {
+				A MCString
+			}{
+				"Hello!",
+			},
+			[]byte("\x06Hello!"),
+		},
 	}
 
 	for i, c := range cases {
@@ -211,6 +219,14 @@ func TestUnmarshal(t *testing.T) {
 				D LTriad
 			}{
 				D: 1,
+			},
+		},
+		{
+			[]byte("\x06Hello!"),
+			struct {
+				A MCString
+			}{
+				"Hello!",
 			},
 		},
 	}
