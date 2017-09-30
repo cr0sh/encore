@@ -229,6 +229,14 @@ func TestUnmarshal(t *testing.T) {
 				"Hello!",
 			},
 		},
+		{
+			[]byte("\x01\x02\x03\x04"),
+			struct {
+				A [3]byte
+			}{
+				[3]byte{1, 2, 3},
+			},
+		},
 	}
 
 	for i, c := range cases {

@@ -205,14 +205,14 @@ func pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 
 	case reflect.Array, reflect.Slice:
+		length := v.Len()
 		if v.Type().Elem().Kind() == reflect.Uint8 {
-			if _, err := buf.Write(fv.([]byte)); err != nil {
+			if _, err := buf.Write(v.Slice(0, length).Interface().([]byte)); err != nil {
 				return err
 			}
 			break
 		}
 
-		length := v.Len()
 		for j := 0; j < length; j++ {
 			if err := pack(v.Index(j), buf, endian); err != nil {
 				return err
@@ -359,14 +359,14 @@ func unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 
 	case reflect.Array, reflect.Slice:
+		length := v.Len()
 		if v.Type().Elem().Kind() == reflect.Uint8 {
-			if _, err := buf.Read(v.Interface().([]byte)); err != nil {
+			if _, err := buf.Read(v.Slice(0, length).Interface().([]byte)); err != nil {
 				return err
 			}
 			break
 		}
 
-		length := v.Len()
 		for j := 0; j < length; j++ {
 			if err := unpack(v.Index(j), buf, endian); err != nil {
 				return err
