@@ -1,23 +1,21 @@
-// Package packet implements packet endian.decoding.
-package packet
+package binary
 
 import (
 	"bytes"
 	"errors"
-	"github.com/cr0sh/encore/util/binary"
 	"reflect"
 	"strings"
 	"unsafe"
 )
 
-// Marshaler is a interface implemented by types that can marshal themselves into binary packet data.
+// Marshaler is a interface implemented by types that can marshal themselves into binary stream data.
 type Marshaler interface {
-	MarshalPacket(*bytes.Buffer) error
+	MarshalStream(*bytes.Buffer) error
 }
 
-// Unmarshaler is a interface implemented by types that can unmarshal binary packet data to themselves.
+// Unmarshaler is a interface implemented by types that can unmarshal binary stream data to themselves.
 type Unmarshaler interface {
-	UnmarshalPacket(*bytes.Buffer) error
+	UnmarshalStream(*bytes.Buffer) error
 }
 
 // Marshal encodes struct v into buf.
@@ -31,7 +29,7 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 
 	for i := 0; i < vv.NumField(); i++ {
 		field := vv.Field(i)
-		tag := strings.ToLower(t.Field(i).Tag.Get("packet"))
+		tag := strings.ToLower(t.Field(i).Tag.Get("stream"))
 		if tag == "pass" || !field.CanInterface() {
 			continue
 		}
@@ -44,15 +42,15 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 
 		fv := field.Interface()
 		if marshaler, ok := fv.(Marshaler); ok {
-			if err := marshaler.MarshalPacket(buf); err != nil {
+			if err := marshaler.MarshalStream(buf); err != nil {
 				return err
 			}
 			continue
 		}
 
-		var endian binary.ByteOrder = binary.BigEndian
+		var endian ByteOrder = BigEndian
 		if _, ok := option["little"]; ok {
-			endian = binary.LittleEndian
+			endian = LittleEndian
 		}
 
 		if field.Kind() == reflect.Slice && i+1 != vv.NumField() {
@@ -70,7 +68,7 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 	return nil
 }
 
-func pack(v reflect.Value, buf *bytes.Buffer, endian binary.ByteOrder) error {
+func pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 	kind := v.Kind()
 	fv := v.Interface()
 
@@ -225,13 +223,13 @@ func pack(v reflect.Value, buf *bytes.Buffer, endian binary.ByteOrder) error {
 	return nil
 }
 
-// Unmarshal parses binary packet data from buf and stores the result in the struct pointed by v.
+// Unmarshal parses binary stream data from buf and stores the result in the struct pointed by v.
 func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 	vv := reflect.ValueOf(v).Elem()
 	t := vv.Type()
 	for i := 0; i < t.NumField(); i++ {
 		field := vv.Field(i)
-		tag := strings.ToLower(t.Field(i).Tag.Get("packet"))
+		tag := strings.ToLower(t.Field(i).Tag.Get("stream"))
 		if tag == "pass" || !field.CanSet() {
 			continue
 		}
@@ -244,15 +242,15 @@ func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 
 		fv := field.Addr().Interface()
 		if unmarshaler, ok := fv.(Unmarshaler); ok {
-			if err := unmarshaler.UnmarshalPacket(buf); err != nil {
+			if err := unmarshaler.UnmarshalStream(buf); err != nil {
 				return err
 			}
 			continue
 		}
 
-		var endian binary.ByteOrder = binary.BigEndian
+		var endian ByteOrder = BigEndian
 		if _, ok := option["little"]; ok {
-			endian = binary.LittleEndian
+			endian = LittleEndian
 		}
 
 		if field.Kind() == reflect.Slice && i+1 != vv.NumField() {
@@ -269,7 +267,7 @@ func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 	return nil
 }
 
-func unpack(v reflect.Value, buf *bytes.Buffer, endian binary.ByteOrder) error {
+func unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 	kind := v.Kind()
 
 	switch kind {

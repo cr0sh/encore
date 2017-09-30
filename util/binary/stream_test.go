@@ -1,4 +1,4 @@
-package packet
+package binary
 
 import (
 	"bytes"
@@ -42,10 +42,10 @@ func TestMarshal(t *testing.T) {
 		},
 		{
 			struct {
-				A uint32 `packet:"pass"`
+				A uint32 `stream:"pass"`
 				B LTriad
 				C float64
-				D uint16 `packet:"little"`
+				D uint16 `stream:"little"`
 			}{
 				3,
 				0xdeadff,
@@ -64,7 +64,7 @@ func TestMarshal(t *testing.T) {
 				A [3]struct {
 					A LTriad
 					b int
-					C int32 `packet:"pass"`
+					C int32 `stream:"pass"`
 					D int
 				}
 			}{
@@ -72,7 +72,7 @@ func TestMarshal(t *testing.T) {
 				[3]struct {
 					A LTriad
 					b int
-					C int32 `packet:"pass"`
+					C int32 `stream:"pass"`
 					D int
 				}{
 					{
@@ -106,7 +106,7 @@ func TestMarshal(t *testing.T) {
 				A []struct {
 					A LTriad
 					b int
-					C int32 `packet:"pass"`
+					C int32 `stream:"pass"`
 					D int
 				}
 			}{
@@ -114,7 +114,7 @@ func TestMarshal(t *testing.T) {
 				[]struct {
 					A LTriad
 					b int
-					C int32 `packet:"pass"`
+					C int32 `stream:"pass"`
 					D int
 				}{
 					{
