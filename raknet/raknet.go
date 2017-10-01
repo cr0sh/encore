@@ -7,6 +7,14 @@
 //  https://github.com/NiclasOlofsson/MiNET
 package raknet
 
+import (
+	"bytes"
+	"errors"
+	"github.com/cr0sh/encore/util/binary"
+	"net"
+	"strconv"
+)
+
 const OFFLINE_MESSAGE_DATA_ID = "\x00\xff\xff\x00\xfe\xfe\xfe\xfe\xfd\xfd\xfd\xfd\x12\x34\x56\x78"
 
 type offlineMessageDataID struct{}

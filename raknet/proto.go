@@ -1,11 +1,7 @@
 package raknet
 
 import (
-	"bytes"
-	"errors"
 	"github.com/cr0sh/encore/util/binary"
-	"net"
-	"strconv"
 )
 
 // Packet ID: 0x00
