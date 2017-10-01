@@ -1,6 +1,6 @@
 // Package binary evtends standard encoding/binary package,
 // with additional functionality for other types
-// used in raknet/minecraft protocols.. (boolean, triad, etc.)
+// used in raknet/minecraft protocols. (boolean, triad, etc.)
 package binary
 
 import (
