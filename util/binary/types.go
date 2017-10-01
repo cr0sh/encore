@@ -78,3 +78,24 @@ func (s *MCString) UnmarshalStream(buf *bytes.Buffer) error {
 	*s = MCString(b)
 	return nil
 }
+
+// FixedMCString is a old-style MCString type with fixed-size length field.
+type FixedMCString string
+
+// MarshalStream implements Marshaler interface.
+func (s FixedMCString) MarshalStream(buf *bytes.Buffer) (err error) {
+	b := make([]byte, 2)
+	BigEndian.PutInt16(b, int16(len(s)))
+	if _, err = buf.Write(b); err != nil {
+		return
+	}
+	_, err = buf.WriteString(string(s))
+	return
+}
+
+// UnmarshalStream implements Unmarshaler interface.
+func (s *FixedMCString) UnmarshalStream(buf *bytes.Buffer) (err error) {
+	b := buf.Next(int(BigEndian.Int16(buf.Next(2))))
+	*s = FixedMCString(b)
+	return nil
+}

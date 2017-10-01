@@ -152,6 +152,14 @@ func TestMarshal(t *testing.T) {
 			},
 			[]byte("\x06Hello!"),
 		},
+		{
+			struct {
+				A FixedMCString
+			}{
+				FixedMCString("Hello!"),
+			},
+			[]byte("\x00\x06Hello!"),
+		},
 	}
 
 	for i, c := range cases {
@@ -235,6 +243,14 @@ func TestUnmarshal(t *testing.T) {
 				A [3]byte
 			}{
 				[3]byte{1, 2, 3},
+			},
+		},
+		{
+			[]byte("\x00\x03abcde"),
+			struct {
+				A FixedMCString
+			}{
+				FixedMCString("abc"),
 			},
 		},
 	}
