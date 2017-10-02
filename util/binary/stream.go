@@ -29,6 +29,7 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 		if err := marshaler.MarshalStream(buf); err != nil {
 			return MarshalStreamError{err}
 		}
+		return nil
 	}
 	vv := reflect.ValueOf(v)
 	t := vv.Type()
@@ -243,6 +244,7 @@ func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 		if err := unmarshaler.UnmarshalStream(buf); err != nil {
 			return UnmarshalStreamError{err}
 		}
+		return nil
 	}
 
 	vv := reflect.ValueOf(v).Elem()
