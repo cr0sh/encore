@@ -162,12 +162,12 @@ func (dp DataPacket) MarshalStream(buf *bytes.Buffer) (err error) {
 // UnmarshalStream implements Stream Unmarshaler interface.
 func (dp *DataPacket) UnmarshalStream(buf *bytes.Buffer) (err error) {
 	b := make([]byte, 3)
-	if _, err := buf.Read(b); err != nil {
+	if _, err = buf.Read(b); err != nil {
 		return
 	}
 	dp.Seq = binary.LittleEndian.Triad(b)
 
-	for !buf.Len() > 0 {
+	for !(buf.Len() > 0) {
 		ep := new(EncapsulatedPacket)
 		if err = ep.UnmarshalStream(buf); err != nil {
 			return
