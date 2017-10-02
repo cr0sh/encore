@@ -14,7 +14,7 @@ type Marshaler interface {
 }
 
 // Unmarshaler is a interface implemented by types that can unmarshal binary stream data to themselves.
-// If a type is struct, UnmarshalStream should be nil-safe.
+// If a type is struct, UnmarshalStream should aware that its fields can be not initialized.
 type Unmarshaler interface {
 	UnmarshalStream(*bytes.Buffer) error
 }

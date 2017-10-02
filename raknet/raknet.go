@@ -45,9 +45,6 @@ func (a IPAddr) MarshalStream(buf *bytes.Buffer) error {
 
 // UnmarshalStream implements Strream Unmarshaler interface.
 func (a *IPAddr) UnmarshalStream(buf *bytes.Buffer) (err error) {
-	if a == nil {
-		a = new(IPAddr)
-	}
 	b := make([]byte, 7)
 	if _, err = buf.Read(b); err != nil {
 		return
