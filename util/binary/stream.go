@@ -416,5 +416,5 @@ type UnmarshalError struct {
 }
 
 func (err UnmarshalError) Error() string {
-	return "Error while marshaling " + err.field.Name + ": " + err.E.Error()
+	return "Error while unmarshaling " + err.field.Name + ": " + err.E.Error()
 }
