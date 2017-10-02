@@ -46,6 +46,9 @@ type OpenConnectionReply1 struct {
 // Packet ID: 0x07
 type OpenConnectionRequest2 struct {
 	OfflineMsg offlineMessageDataID
+	RemoteAddr IPAddr
+	MTU        uint16
+	ClientGUID uint64
 }
 
 // Packet ID: 0x08
