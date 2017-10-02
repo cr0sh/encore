@@ -20,8 +20,16 @@ type Unmarshaler interface {
 }
 
 // Marshal encodes struct v into buf.
+//
+// If v implements Marshaler, Marshal calls v.MarshalStream.
+// Otherwise, Marshal calls Pack for its fields(recursively).
 // If v is not a struct, Marshal returns an InvalidMarshalTypeError.
 func Marshal(v interface{}, buf *bytes.Buffer) error {
+	if marshaler, ok := v.(Marshaler); ok {
+		if err := marshaler.MarshalStream(buf); err != nil {
+			return MarshalStreamError{err}
+		}
+	}
 	vv := reflect.ValueOf(v)
 	t := vv.Type()
 	if t.Kind() != reflect.Struct {
@@ -61,7 +69,7 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 			}
 		}
 
-		if err := pack(field, buf, endian); err != nil {
+		if err := Pack(field, buf, endian); err != nil {
 			return MarshalError{err, t.Field(i)}
 		}
 
@@ -69,7 +77,9 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 	return nil
 }
 
-func pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
+// Pack encodes v into buf.
+// v can be a struct, bool, int, uint, float, array, or slice of foresaid types.
+func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 	kind := v.Kind()
 	fv := v.Interface()
 
@@ -215,7 +225,7 @@ func pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 
 		for j := 0; j < length; j++ {
-			if err := pack(v.Index(j), buf, endian); err != nil {
+			if err := Pack(v.Index(j), buf, endian); err != nil {
 				return err
 			}
 		}
@@ -225,7 +235,16 @@ func pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 }
 
 // Unmarshal parses binary stream data from buf and stores the result in the struct pointed by v.
+//
+// If v implements Unmarshaler, Marshal calls v.UnmarshalStream.
+// Otherwise, Unmarshal calls Unack for its fields(recursively).
 func Unmarshal(v interface{}, buf *bytes.Buffer) error {
+	if unmarshaler, ok := v.(Unmarshaler); ok {
+		if err := unmarshaler.UnmarshalStream(buf); err != nil {
+			return UnmarshalStreamError{err}
+		}
+	}
+
 	vv := reflect.ValueOf(v).Elem()
 	t := vv.Type()
 	for i := 0; i < t.NumField(); i++ {
@@ -261,14 +280,17 @@ func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 			}
 		}
 
-		if err := unpack(field, buf, endian); err != nil {
+		if err := Unpack(field, buf, endian); err != nil {
 			return UnmarshalError{err, t.Field(i)}
 		}
 	}
 	return nil
 }
 
-func unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
+// Unpack reads byte stream from buf and stores decoded value to v.
+// v can be a struct, bool, int, uint, float, array, or slice of foresaid types.
+// v.CanSet() must be true, or Unpack will panic.
+func Unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 	kind := v.Kind()
 
 	switch kind {
@@ -369,7 +391,7 @@ func unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 
 		for j := 0; j < length; j++ {
-			if err := unpack(v.Index(j), buf, endian); err != nil {
+			if err := Unpack(v.Index(j), buf, endian); err != nil {
 				return err
 			}
 		}
@@ -401,6 +423,14 @@ func (err TypeAssertionError) Error() string {
 	return "Type assertion failed to " + err.totype
 }
 
+type MarshalStreamError struct {
+	E error
+}
+
+func (err MarshalStreamError) Error() string {
+	return "MarshalStream failed: " + err.E.Error()
+}
+
 type MarshalError struct {
 	E     error
 	field reflect.StructField
@@ -408,6 +438,14 @@ type MarshalError struct {
 
 func (err MarshalError) Error() string {
 	return "Error while marshaling " + err.field.Name + ": " + err.E.Error()
+}
+
+type UnmarshalStreamError struct {
+	E error
+}
+
+func (err UnmarshalStreamError) Error() string {
+	return "UnmarshalStream failed: " + err.E.Error()
 }
 
 type UnmarshalError struct {
