@@ -1,8 +1,8 @@
 package binary
 
 import (
-	"bytes"
 	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"unsafe"
@@ -10,23 +10,23 @@ import (
 
 // Marshaler is a interface implemented by types that can marshal themselves into binary stream data.
 type Marshaler interface {
-	MarshalStream(*bytes.Buffer) error
+	MarshalStream(io.Writer) error
 }
 
 // Unmarshaler is a interface implemented by types that can unmarshal binary stream data to themselves.
 // If a type is struct, UnmarshalStream should aware that its fields can be not initialized.
 type Unmarshaler interface {
-	UnmarshalStream(*bytes.Buffer) error
+	UnmarshalStream(io.Reader) error
 }
 
-// Marshal encodes struct v into buf.
+// Marshal encodes struct v into wr.
 //
 // If v implements Marshaler, Marshal calls v.MarshalStream.
 // Otherwise, Marshal calls Pack for its fields(recursively).
 // If v is not a struct, Marshal returns an InvalidMarshalTypeError.
-func Marshal(v interface{}, buf *bytes.Buffer) error {
+func Marshal(v interface{}, wr io.Writer) error {
 	if marshaler, ok := v.(Marshaler); ok {
-		if err := marshaler.MarshalStream(buf); err != nil {
+		if err := marshaler.MarshalStream(wr); err != nil {
 			return MarshalStreamError{err}
 		}
 		return nil
@@ -52,7 +52,7 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 
 		fv := field.Interface()
 		if marshaler, ok := fv.(Marshaler); ok {
-			if err := marshaler.MarshalStream(buf); err != nil {
+			if err := marshaler.MarshalStream(wr); err != nil {
 				return err
 			}
 			continue
@@ -70,7 +70,7 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 			}
 		}
 
-		if err := Pack(field, buf, endian); err != nil {
+		if err := Pack(field, wr, endian); err != nil {
 			return MarshalError{err, t.Field(i)}
 		}
 
@@ -78,9 +78,9 @@ func Marshal(v interface{}, buf *bytes.Buffer) error {
 	return nil
 }
 
-// Pack encodes v into buf.
+// Pack encodes v into wr.
 // v can be a struct, bool, int, uint, float, array, or slice of foresaid types.
-func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
+func Pack(v reflect.Value, wr io.Writer, endian ByteOrder) error {
 	kind := v.Kind()
 	fv := v.Interface()
 
@@ -96,9 +96,9 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 
 		var err error
 		if fv {
-			err = buf.WriteByte(1)
+			_, err = wr.Write([]byte{1})
 		} else {
-			err = buf.WriteByte(0)
+			_, err = wr.Write([]byte{0})
 		}
 
 		if err != nil {
@@ -110,7 +110,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		if !ok {
 			return TypeAssertionError{"int8"}
 		}
-		if err := buf.WriteByte(*(*byte)(unsafe.Pointer(&fv))); err != nil {
+		if _, err := wr.Write([]byte{*(*byte)(unsafe.Pointer(&fv))}); err != nil {
 			return err
 		}
 
@@ -119,7 +119,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		if !ok {
 			return TypeAssertionError{"byte"}
 		}
-		if err := buf.WriteByte(fv); err != nil {
+		if _, err := wr.Write([]byte{fv}); err != nil {
 			return err
 		}
 
@@ -130,7 +130,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 2)
 		endian.PutInt16(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -141,7 +141,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 2)
 		endian.PutUint16(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -152,7 +152,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 4)
 		endian.PutInt32(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -163,7 +163,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 4)
 		endian.PutUint32(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -174,7 +174,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 8)
 		endian.PutInt64(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -185,7 +185,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 8)
 		endian.PutUint64(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -196,7 +196,7 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 4)
 		endian.PutFloat32(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
@@ -207,26 +207,26 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		}
 		b := make([]byte, 8)
 		endian.PutFloat64(b, fv)
-		if _, err := buf.Write(b); err != nil {
+		if _, err := wr.Write(b); err != nil {
 			return err
 		}
 
 	case reflect.Struct:
-		if err := Marshal(fv, buf); err != nil {
+		if err := Marshal(fv, wr); err != nil {
 			return err
 		}
 
 	case reflect.Array, reflect.Slice:
 		length := v.Len()
 		if v.Type().Elem().Kind() == reflect.Uint8 {
-			if _, err := buf.Write(v.Slice(0, length).Interface().([]byte)); err != nil {
+			if _, err := wr.Write(v.Slice(0, length).Interface().([]byte)); err != nil {
 				return err
 			}
 			break
 		}
 
 		for j := 0; j < length; j++ {
-			if err := Pack(v.Index(j), buf, endian); err != nil {
+			if err := Pack(v.Index(j), wr, endian); err != nil {
 				return err
 			}
 		}
@@ -235,13 +235,13 @@ func Pack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 	return nil
 }
 
-// Unmarshal parses binary stream data from buf and stores the result in the struct pointed by v.
+// Unmarshal parses binary stream data from rd and stores the result in the struct pointed by v.
 //
 // If v implements Unmarshaler, Marshal calls v.UnmarshalStream.
 // Otherwise, Unmarshal calls Unack for its fields(recursively).
-func Unmarshal(v interface{}, buf *bytes.Buffer) error {
+func Unmarshal(v interface{}, rd io.Reader) error {
 	if unmarshaler, ok := v.(Unmarshaler); ok {
-		if err := unmarshaler.UnmarshalStream(buf); err != nil {
+		if err := unmarshaler.UnmarshalStream(rd); err != nil {
 			return UnmarshalStreamError{err}
 		}
 		return nil
@@ -264,7 +264,7 @@ func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 
 		fv := field.Addr().Interface()
 		if unmarshaler, ok := fv.(Unmarshaler); ok {
-			if err := unmarshaler.UnmarshalStream(buf); err != nil {
+			if err := unmarshaler.UnmarshalStream(rd); err != nil {
 				return err
 			}
 			continue
@@ -282,17 +282,17 @@ func Unmarshal(v interface{}, buf *bytes.Buffer) error {
 			}
 		}
 
-		if err := Unpack(field, buf, endian); err != nil {
+		if err := Unpack(field, rd, endian); err != nil {
 			return UnmarshalError{err, t.Field(i)}
 		}
 	}
 	return nil
 }
 
-// Unpack reads byte stream from buf and stores decoded value to v.
+// Unpack reads byte stream from rd and stores decoded value to v.
 // v can be a struct, bool, int, uint, float, array, or slice of foresaid types.
 // v.CanSet() must be true, or Unpack will panic.
-func Unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
+func Unpack(v reflect.Value, rd io.Reader, endian ByteOrder) error {
 	kind := v.Kind()
 
 	switch kind {
@@ -300,100 +300,100 @@ func Unpack(v reflect.Value, buf *bytes.Buffer, endian ByteOrder) error {
 		break // explicit break expression to clarify separated case with "bool"
 
 	case reflect.Bool:
-		x, err := buf.ReadByte()
-		if err != nil {
+		b := make([]byte, 1)
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
-		if x != 0 {
+		if b[0] != 0 {
 			v.SetBool(true)
 		}
 
 	case reflect.Int8:
-		x, err := buf.ReadByte()
-		if err != nil {
+		b := make([]byte, 1)
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
-		v.SetInt(int64(*(*int8)(unsafe.Pointer(&x))))
+		v.SetInt(int64(*(*int8)(unsafe.Pointer(&b[0]))))
 
 	case reflect.Uint8:
-		x, err := buf.ReadByte()
-		if err != nil {
+		b := make([]byte, 1)
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
-		v.SetUint(uint64(x))
+		v.SetUint(uint64(b[0]))
 
 	case reflect.Int16:
 		b := make([]byte, 2)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetInt(int64(endian.Int16(b)))
 
 	case reflect.Uint16:
 		b := make([]byte, 2)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetUint(uint64(endian.Uint16(b)))
 
 	case reflect.Int32:
 		b := make([]byte, 4)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetInt(int64(endian.Int32(b)))
 
 	case reflect.Uint32:
 		b := make([]byte, 4)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetUint(uint64(endian.Uint32(b)))
 
 	case reflect.Int64:
 		b := make([]byte, 8)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetInt(endian.Int64(b))
 
 	case reflect.Uint64:
 		b := make([]byte, 8)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetUint(endian.Uint64(b))
 
 	case reflect.Float32:
 		b := make([]byte, 4)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetFloat(float64(endian.Float32(b)))
 
 	case reflect.Float64:
 		b := make([]byte, 8)
-		if _, err := buf.Read(b); err != nil {
+		if _, err := rd.Read(b); err != nil {
 			return err
 		}
 		v.SetFloat(endian.Float64(b))
 
 	case reflect.Struct:
-		if err := Unmarshal(v.Addr().Interface(), buf); err != nil {
+		if err := Unmarshal(v.Addr().Interface(), rd); err != nil {
 			return err
 		}
 
 	case reflect.Array, reflect.Slice:
 		length := v.Len()
 		if v.Type().Elem().Kind() == reflect.Uint8 {
-			if _, err := buf.Read(v.Slice(0, length).Interface().([]byte)); err != nil {
+			if _, err := rd.Read(v.Slice(0, length).Interface().([]byte)); err != nil {
 				return err
 			}
 			break
 		}
 
 		for j := 0; j < length; j++ {
-			if err := Unpack(v.Index(j), buf, endian); err != nil {
+			if err := Unpack(v.Index(j), rd, endian); err != nil {
 				return err
 			}
 		}
