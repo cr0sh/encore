@@ -1,9 +1,9 @@
 package raknet
 
 import (
-	"bytes"
 	"github.com/cr0sh/encore/util/binary"
 	log "github.com/sirupsen/logrus"
+	"io"
 )
 
 // EncapsulatedPacket is an advanced raknet packet format
@@ -47,27 +47,27 @@ func (ep EncapsulatedPacket) Len() int {
 }
 
 // MarshalStream implements Stream Marshaler interface.
-func (ep EncapsulatedPacket) MarshalStream(buf *bytes.Buffer) (err error) {
+func (ep EncapsulatedPacket) MarshalStream(wr io.Writer) (err error) {
 	flag := ep.Reliability << 5
 	if ep.IsSplit {
 		flag |= (1 << 4)
 	}
 
-	buf_ := make([]byte, 3, 20)
-	buf_[0] = flag
-	binary.BigEndian.PutUint16(buf_[1:3], uint16(len(ep.Payload)<<3))
+	buf := make([]byte, 3, 20)
+	buf[0] = flag
+	binary.BigEndian.PutUint16(buf[1:3], uint16(len(ep.Payload)<<3))
 
 	if ep.Reliability > 0 {
 		if ep.Reliability >= 2 && ep.Reliability != 5 {
 			b := make([]byte, 3)
 			binary.LittleEndian.PutTriad(b, ep.MessageIndex)
-			buf_ = append(buf_, b...)
+			buf = append(buf, b...)
 		}
 		if ep.Reliability <= 4 && ep.Reliability != 2 {
 			b := make([]byte, 4)
 			binary.LittleEndian.PutTriad(b, ep.OrderIndex)
 			b[3] = ep.OrderChannel
-			buf_ = append(buf_, b...)
+			buf = append(buf, b...)
 		}
 	}
 
@@ -76,47 +76,47 @@ func (ep EncapsulatedPacket) MarshalStream(buf *bytes.Buffer) (err error) {
 		binary.BigEndian.PutUint32(b, ep.SplitCount)
 		binary.BigEndian.PutUint16(b[4:], ep.SplitID)
 		binary.BigEndian.PutUint32(b[6:], ep.SplitIndex)
-		buf_ = append(buf_, b...)
+		buf = append(buf, b...)
 	}
 
-	if ep.headLen() != len(buf_) {
+	if ep.headLen() != len(buf) {
 		log.WithFields(log.Fields{
 			"expected": ep.headLen(),
-			"real":     len(buf_),
+			"real":     len(buf),
 		}).Warn("Incorrect EncapsulatedPacket header length")
 	}
 
-	if _, err = buf.Write(buf_); err != nil {
+	if _, err = wr.Write(buf); err != nil {
 		return
 	}
 
-	_, err = buf.Write(ep.Payload)
+	_, err = wr.Write(ep.Payload)
 	return
 }
 
 // UnmarshalStream implements Stream Unmarshaler interface.
-func (ep *EncapsulatedPacket) UnmarshalStream(buf *bytes.Buffer) (err error) {
+func (ep *EncapsulatedPacket) UnmarshalStream(rd io.Reader) (err error) {
 	b := make([]byte, 10)
-	if _, err = buf.Read(b[:3]); err != nil {
+	if _, err = rd.Read(b[:3]); err != nil {
 		return
 	}
 	ep.Reliability = b[0] >> 5
 	ep.IsSplit = b[0]&(1<<4) > 0
 
-	payloadLen := binary.BigEndian.Uint16(b[:2]) >> 3
-	if b[1]&7 != 0 {
+	payloadLen := binary.BigEndian.Uint16(b[1:3]) >> 3
+	if b[2]&7 != 0 {
 		payloadLen++
 	}
 
 	if ep.Reliability > 0 {
 		if ep.Reliability >= 2 && ep.Reliability != 5 {
-			if _, err = buf.Read(b[:3]); err != nil {
+			if _, err = rd.Read(b[:3]); err != nil {
 				return
 			}
 			ep.MessageIndex = binary.LittleEndian.Triad(b[:3])
 		}
 		if ep.Reliability <= 4 && ep.Reliability != 2 {
-			if _, err = buf.Read(b[:4]); err != nil {
+			if _, err = rd.Read(b[:4]); err != nil {
 				return
 			}
 			ep.OrderIndex = binary.LittleEndian.Triad(b[:3])
@@ -125,7 +125,7 @@ func (ep *EncapsulatedPacket) UnmarshalStream(buf *bytes.Buffer) (err error) {
 	}
 
 	if ep.IsSplit {
-		if _, err = buf.Read(b[:10]); err != nil {
+		if _, err = rd.Read(b[:10]); err != nil {
 			return
 		}
 		ep.SplitCount = binary.BigEndian.Uint32(b[:4])
@@ -134,25 +134,25 @@ func (ep *EncapsulatedPacket) UnmarshalStream(buf *bytes.Buffer) (err error) {
 	}
 
 	ep.Payload = make([]byte, payloadLen)
-	_, err = buf.Read(ep.Payload)
+	_, err = rd.Read(ep.Payload)
 	return
 }
 
 // DataPacket is a set of EncapsulatedPackets with sequence number used in MCPE protocols.
 type DataPacket struct {
-	Seq     uint32
+	Seq     binary.LTriad
 	Packets []EncapsulatedPacket
 }
 
 // MarshalStream implements Stream Marshaler interface.
-func (dp DataPacket) MarshalStream(buf *bytes.Buffer) (err error) {
+func (dp DataPacket) MarshalStream(wr io.Writer) (err error) {
 	b := make([]byte, 3)
-	binary.LittleEndian.PutTriad(b, dp.Seq)
-	if _, err = buf.Write(b); err != nil {
+	binary.LittleEndian.PutTriad(b, uint32(dp.Seq))
+	if _, err = wr.Write(b); err != nil {
 		return
 	}
 	for i := range dp.Packets {
-		if err = dp.Packets[i].MarshalStream(buf); err != nil {
+		if err = dp.Packets[i].MarshalStream(wr); err != nil {
 			return err
 		}
 	}
@@ -160,21 +160,23 @@ func (dp DataPacket) MarshalStream(buf *bytes.Buffer) (err error) {
 }
 
 // UnmarshalStream implements Stream Unmarshaler interface.
-func (dp *DataPacket) UnmarshalStream(buf *bytes.Buffer) (err error) {
+func (dp *DataPacket) UnmarshalStream(rd io.Reader) (err error) {
 	b := make([]byte, 3)
-	if _, err = buf.Read(b); err != nil {
+	if _, err = rd.Read(b); err != nil {
 		return
 	}
-	dp.Seq = binary.LittleEndian.Triad(b)
+	dp.Seq = binary.LTriad(binary.LittleEndian.Triad(b))
 
-	for !(buf.Len() > 0) {
+	for {
 		ep := new(EncapsulatedPacket)
-		if err = ep.UnmarshalStream(buf); err != nil {
+		if err = ep.UnmarshalStream(rd); err == io.EOF {
+			return nil
+		} else if err != nil {
 			return
 		}
 
 		if len(ep.Payload) == 0 {
-			// I don't know Why
+			// I don't know why PM/Nukkit implemented like this
 			// ref https://github.com/Nukkit/Nukkit/blob/master/src/main/java/cn/nukkit/raknet/protocol/DataPacket.java#L45
 			break
 		}

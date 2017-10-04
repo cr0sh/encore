@@ -8,9 +8,9 @@
 package raknet
 
 import (
-	"bytes"
 	"errors"
 	"github.com/cr0sh/encore/util/binary"
+	"io"
 	"net"
 	"strconv"
 )
@@ -19,34 +19,34 @@ const OFFLINE_MESSAGE_DATA_ID = "\x00\xff\xff\x00\xfe\xfe\xfe\xfe\xfd\xfd\xfd\xf
 
 type offlineMessageDataID struct{}
 
-func (offlineMessageDataID) MarshalStream(buf *bytes.Buffer) (err error) {
-	_, err = buf.WriteString(OFFLINE_MESSAGE_DATA_ID)
+func (offlineMessageDataID) MarshalStream(wr io.Writer) (err error) {
+	_, err = wr.Write([]byte(OFFLINE_MESSAGE_DATA_ID))
 	return
 }
 
-func (*offlineMessageDataID) UnmarshalStream(buf *bytes.Buffer) (err error) {
-	buf.Next(len(OFFLINE_MESSAGE_DATA_ID))
-	return nil
+func (*offlineMessageDataID) UnmarshalStream(rd io.Reader) (err error) {
+	_, err = rd.Read(make([]byte, len([]byte(OFFLINE_MESSAGE_DATA_ID))))
+	return
 }
 
 // IPAddr represents a single UDP endpoint address in raknet.
 type IPAddr net.UDPAddr
 
 // MarshalStream implements Stream Marshaler interface.
-func (a IPAddr) MarshalStream(buf *bytes.Buffer) error {
+func (a IPAddr) MarshalStream(wr io.Writer) error {
 	v4ip := a.IP.To4() // Currently only supports IPv4
 	b := make([]byte, 7)
 	b[0] = 4
 	copy(b[1:5], v4ip[:4])
 	binary.BigEndian.PutUint16(b[5:7], uint16(a.Port))
-	_, err := buf.Write(b)
+	_, err := wr.Write(b)
 	return err
 }
 
 // UnmarshalStream implements Strream Unmarshaler interface.
-func (a *IPAddr) UnmarshalStream(buf *bytes.Buffer) (err error) {
+func (a *IPAddr) UnmarshalStream(rd io.Reader) (err error) {
 	b := make([]byte, 7)
-	if _, err = buf.Read(b); err != nil {
+	if _, err = rd.Read(b); err != nil {
 		return
 	}
 	if b[0] != 4 {
@@ -72,12 +72,12 @@ const systemAddressesReady = "\x04\x80\xff\xff\xfe\x00\x00" +
 
 type systemAddresses struct{}
 
-func (systemAddresses) MarshalStream(buf *bytes.Buffer) (err error) {
-	_, err = buf.WriteString(systemAddressesReady)
+func (systemAddresses) MarshalStream(wr io.Writer) (err error) {
+	_, err = wr.Write([]byte(systemAddressesReady))
 	return
 }
 
-func (*systemAddresses) UnmarshalStream(buf *bytes.Buffer) error {
-	buf.Next(len(systemAddressesReady))
-	return nil
+func (*systemAddresses) UnmarshalStream(rd io.Reader) (err error) {
+	_, err = rd.Read(make([]byte, len([]byte(systemAddressesReady))))
+	return
 }
