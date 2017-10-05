@@ -6,7 +6,7 @@ import (
 
 // Packet ID: 0x00
 type ConnectedPing struct {
-	SendPingTime uint64
+	SendPingTime int64
 }
 
 // Packet ID: 0x01
@@ -17,7 +17,7 @@ type UnconnectedPing struct {
 
 // Packet ID: 0x03
 type ConnectedPong struct {
-	SendPingTime uint64
+	SendPingTime int64
 	SendPongTime uint64
 }
 
@@ -63,7 +63,7 @@ type OpenConnectionRePly2 struct {
 // Packet ID: 0x09
 type ConnectRequest struct {
 	ClientGUID   uint64
-	SendPingTime uint64
+	SendPingTime int64
 	Security     bool
 }
 
@@ -72,7 +72,7 @@ type ServerHandshake struct {
 	SystemAddr   IPAddr
 	SystemIdx    uint16
 	SystemAddrs  systemAddresses
-	SendPingTime uint64
+	SendPingTime int64
 	SendPongTime uint64
 }
 
@@ -80,7 +80,7 @@ type ServerHandshake struct {
 type ClientHandshake struct {
 	ClientAddr   IPAddr
 	SystemAddrs  systemAddresses
-	SendPingTime uint64
+	SendPingTime int64
 	SendPongTime uint64
 }
 
