@@ -8,6 +8,9 @@ import (
 	"sort"
 )
 
+// ACKMap is a set type for saving ACK/NACK packet IDs.
+type ACKMap = map[uint32]struct{}
+
 // EncodeACK encodes given ACKMap to Writer.
 func EncodeACK(ack ACKMap, wr io.Writer) error {
 	var warned bool

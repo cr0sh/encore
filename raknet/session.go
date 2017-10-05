@@ -21,9 +21,6 @@ const (
 	STREAM_OPT_ORDERCHAN = 2 // TODO
 )
 
-// ACKMap is a set type for saving ACK/NACK packet IDs.
-type ACKMap = map[uint32]struct{}
-
 // PacketWindow is a sized pool for buffering/recovering misordered packet stream.
 // NOTE: pool is a fixed-sized array of unsafe.Pointer, but it can be changed to slice in the future.
 // PacketWindow.Init must be called once for initialization.
