@@ -80,7 +80,7 @@ func (ep EncapsulatedPacket) MarshalStream(wr io.Writer) (err error) {
 	}
 
 	if ep.headLen() != len(buf) {
-		log.WithFields(log.Fields{
+		log.WithFields(log.Fields{ // TODO: Remove this
 			"expected": ep.headLen(),
 			"real":     len(buf),
 		}).Warn("Incorrect EncapsulatedPacket header length")

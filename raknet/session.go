@@ -14,12 +14,14 @@ const (
 	WindowSize = 1024
 )
 
-// Options for QueueEncapsulated
-const (
-	STREAM_OPT_NONE      = iota
-	STREAM_OPT_MSGIDX    = 1
-	STREAM_OPT_ORDERCHAN = 2 // TODO
-)
+// StreamOption is a option for sending EncapsulatedPackets.
+// Session methods must treat StreamOption as reference and
+// nil StreamOption pointer as 'no option'.
+type StreamOption struct {
+	MessageIndex bool
+	// Disabled if <0 (negative)
+	OrderChannel int
+}
 
 // PacketWindow is a sized pool for buffering/recovering misordered packet stream.
 // NOTE: pool is a fixed-sized array of unsafe.Pointer, but it can be changed to slice in the future.
@@ -148,8 +150,11 @@ type Session struct {
 
 	StartTime time.Time
 
+	// ServerConn is session owner's Conn socket.
+	ServerConn *net.UDPConn
+
 	// Address is a remote endpoint address.
-	Conn *net.UDPConn
+	Addr *net.UDPAddr
 	MTU  int
 
 	sendSplitID      uint16
@@ -171,9 +176,9 @@ type Session struct {
 // Init initializes Session.
 // Init returns the Session itself, so we can define
 // Session with new(Session).Init()
-func (sess *Session) Init(conn *net.UDPConn) *Session {
+func (sess *Session) Init(conn *net.UDPConn, addr *net.UDPAddr) *Session {
 	sess.StartTime = time.Now()
-	sess.Conn = conn
+	sess.ServerConn = conn
 
 	sess.sendQueue = make([]EncapsulatedPacket, 0)
 
@@ -188,14 +193,14 @@ func (sess *Session) Init(conn *net.UDPConn) *Session {
 }
 
 // Send copies reader stream to Conn.
-func (sess *Session) Send(rd io.Reader) error {
-	_, err := io.Copy(sess.Conn, rd)
+func (sess *Session) Send(b []byte) error {
+	_, err := sess.ServerConn.WriteToUDP(b, sess.Addr)
 	return err
 }
 
 // FlushSendQueue sends queued EncapsulatedPackets to Conn and resets sendQueue.
 func (sess *Session) FlushSendQueue() error {
-	err := sess.SendEncapsulatedPackets(sess.sendQueue)
+	err := sess.SendEncapsulatedPacket(sess.sendQueue...)
 	sess.sendQueue = make([]EncapsulatedPacket, 0)
 	return err
 }
@@ -220,7 +225,7 @@ func splitStream(rd io.Reader, mtu int) ([][]byte, error) {
 
 // NOTE: encapsulateBytes has a side-effect that increments
 // Session's sendSplitID and sendSplitindex.
-func (sess *Session) encapsulateBytes(bs [][]byte, option uint32) []EncapsulatedPacket {
+func (sess *Session) encapsulateBytes(bs [][]byte, option *StreamOption) []EncapsulatedPacket {
 	eps := make([]EncapsulatedPacket, 0, len(bs))
 	if len(bs) > 1 {
 		for i, b := range bs {
@@ -234,7 +239,7 @@ func (sess *Session) encapsulateBytes(bs [][]byte, option uint32) []Encapsulated
 			}
 			sess.sendSplitID++
 
-			if option&STREAM_OPT_MSGIDX != 0 {
+			if option != nil && option.MessageIndex {
 				ep.Reliability = 2
 				ep.MessageIndex = sess.sendMessageIndex
 				sess.sendMessageIndex++
@@ -247,7 +252,7 @@ func (sess *Session) encapsulateBytes(bs [][]byte, option uint32) []Encapsulated
 			Payload: bs[0],
 		}
 
-		if option&STREAM_OPT_ORDERCHAN != 0 {
+		if option != nil && option.MessageIndex {
 			ep.Reliability = 2
 			ep.MessageIndex = sess.sendMessageIndex
 			sess.sendMessageIndex++
@@ -260,7 +265,7 @@ func (sess *Session) encapsulateBytes(bs [][]byte, option uint32) []Encapsulated
 
 // QueueEncapsulatedStream queues given reader stream to be sent with EncapsulatedPacket
 // until the stream ends.
-func (sess *Session) QueueEncapsulatedStream(rd io.Reader, option uint32) error {
+func (sess *Session) QueueEncapsulatedStream(rd io.Reader, option *StreamOption) error {
 	bs, err := splitStream(rd, sess.MTU)
 	if err != nil {
 		return err
@@ -270,18 +275,18 @@ func (sess *Session) QueueEncapsulatedStream(rd io.Reader, option uint32) error 
 }
 
 // SendEncapsulatedStream directly sends given stream with EncapsulatedPacket.
-func (sess *Session) SendEncapsulatedStream(rd io.Reader, option uint32) error {
+func (sess *Session) SendEncapsulatedStream(rd io.Reader, option *StreamOption) error {
 	bs, err := splitStream(rd, sess.MTU)
 	if err != nil {
 		return err
 	}
 
-	return sess.SendEncapsulatedPackets(sess.encapsulateBytes(bs, option))
+	return sess.SendEncapsulatedPacket(sess.encapsulateBytes(bs, option)...)
 }
 
-// SendEncapsulatedPackets sends given EncapsulatedPackets with
+// SendEncapsulatedPacket sends given EncapsulatedPackets with
 // appropriate number of DataPackets.
-func (sess *Session) SendEncapsulatedPackets(eps []EncapsulatedPacket) error {
+func (sess *Session) SendEncapsulatedPacket(eps ...EncapsulatedPacket) error {
 	length := 0
 	start_idx := 0
 	for idx := range eps {
@@ -300,7 +305,7 @@ func (sess *Session) SendEncapsulatedPackets(eps []EncapsulatedPacket) error {
 			sess.recoveryPool[sess.sendSeq] = dp.Packets
 			sess.sendSeq++
 
-			if err := sess.Send(buf); err != nil {
+			if err := sess.Send(buf.Bytes()); err != nil {
 				return err
 			}
 
@@ -320,7 +325,7 @@ func (sess *Session) SendEncapsulatedPackets(eps []EncapsulatedPacket) error {
 	sess.recoveryPool[sess.sendSeq] = dp.Packets
 	sess.sendSeq++
 
-	if err := sess.Send(buf); err != nil {
+	if err := sess.Send(buf.Bytes()); err != nil {
 		return err
 	}
 
@@ -336,7 +341,7 @@ func (sess *Session) SendACK() error {
 	buf := new(bytes.Buffer)
 	buf.WriteByte(0xc0)
 	EncodeACK(sess.ackPool, buf)
-	return sess.Send(buf)
+	return sess.Send(buf.Bytes())
 }
 
 // SendNACK packs nackPool into single NACK packet and sends to Conn.
@@ -348,7 +353,7 @@ func (sess *Session) SendNACK() error {
 	buf := new(bytes.Buffer)
 	buf.WriteByte(0xa0)
 	EncodeACK(sess.nackPool, buf)
-	return sess.Send(buf)
+	return sess.Send(buf.Bytes())
 }
 
 // HandleACK handles received ACK packet.
@@ -363,7 +368,7 @@ func (sess *Session) HandleNACK(keys []uint32) error {
 	for _, k := range keys {
 		if eps, ok := sess.recoveryPool[k]; ok {
 			delete(sess.recoveryPool, k)
-			if err := sess.SendEncapsulatedPackets(eps); err != nil {
+			if err := sess.SendEncapsulatedPacket(eps...); err != nil {
 				return err
 			}
 		}
@@ -424,4 +429,12 @@ func (sess *Session) HandleDataPacket(dp DataPacket) [][]byte {
 	}
 
 	return bs
+}
+
+// Close closes the session.
+func (sess *Session) Close() {
+	sess.SendEncapsulatedPacket(EncapsulatedPacket{
+		Reliability: 0,
+		Payload:     []byte("\x15"),
+	})
 }
