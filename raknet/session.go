@@ -18,6 +18,7 @@ const (
 // Session methods must treat StreamOption as reference and
 // nil StreamOption pointer as 'no option'.
 type StreamOption struct {
+	Queue        bool
 	MessageIndex bool
 	// Disabled if <0 (negative)
 	OrderChannel int
@@ -192,7 +193,7 @@ func (sess *Session) Init(conn *net.UDPConn, addr *net.UDPAddr) *Session {
 	return sess
 }
 
-// Send copies reader stream to Conn.
+// Send copies b to conn.
 func (sess *Session) Send(b []byte) error {
 	_, err := sess.ServerConn.WriteToUDP(b, sess.Addr)
 	return err
@@ -263,22 +264,16 @@ func (sess *Session) encapsulateBytes(bs [][]byte, option *StreamOption) []Encap
 	return eps
 }
 
-// QueueEncapsulatedStream queues given reader stream to be sent with EncapsulatedPacket
-// until the stream ends.
-func (sess *Session) QueueEncapsulatedStream(rd io.Reader, option *StreamOption) error {
-	bs, err := splitStream(rd, sess.MTU)
-	if err != nil {
-		return err
-	}
-	sess.sendQueue = append(sess.sendQueue, sess.encapsulateBytes(bs, option)...)
-	return nil
-}
-
 // SendEncapsulatedStream directly sends given stream with EncapsulatedPacket.
 func (sess *Session) SendEncapsulatedStream(rd io.Reader, option *StreamOption) error {
 	bs, err := splitStream(rd, sess.MTU)
 	if err != nil {
 		return err
+	}
+
+	if option.Queue {
+		sess.sendQueue = append(sess.sendQueue, sess.encapsulateBytes(bs, option)...)
+		return nil
 	}
 
 	return sess.SendEncapsulatedPacket(sess.encapsulateBytes(bs, option)...)
