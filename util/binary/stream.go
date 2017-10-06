@@ -33,6 +33,10 @@ func Marshal(v interface{}, wr io.Writer) error {
 	}
 	vv := reflect.ValueOf(v)
 	t := vv.Type()
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+		vv = vv.Elem()
+	}
 	if t.Kind() != reflect.Struct {
 		return InvalidMarshalTypeError{t}
 	}
